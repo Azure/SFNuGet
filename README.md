@@ -1,3 +1,10 @@
+# What's SFNuGet?
+
+SFNuGet allows you to package and share your Microsoft Azure Service Fabric services as NuGet packages. Once your service is packaged as a NuGet package, your customers can include your service into their Service Fabric applications by simply adding a reference to your service’s NuGet package.
+
+To package your Service Fabric service as a reusable NuGet package, add a reference to SFNuGet and rebuild your solution - that's all you need to do! 
+
+Please see [this tutorial](http://haishibai.blogspot.com/2016/08/sharing-your-service-fabric-services-as.html) for more details.
 
 # Contributing
 
