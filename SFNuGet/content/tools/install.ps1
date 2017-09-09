@@ -58,6 +58,11 @@ function updateAppManifest($appXml, $srvXml, $appOverridesXml) {
 	$srvName = $srvXml.ServiceManifest.Name.Substring(0, $srvXml.ServiceManifest.Name.Length-3)
     appendAttribute $appXml $srvElement "Name" $srvName
 
+	#$elm = ($srvType.Extensions.Extension | Where-Object {$_.Name -eq '__GeneratedServiceType__'})
+	#if ($elm.Name) {
+	#	appendAttribute $appXml $srvElement "GeneratedIdRef" $elm.GeneratedId
+	#}
+
     Foreach($srvType in $srvXml.ServiceManifest.ServiceTypes.ChildNodes) {
         if ($srvType.Name -eq "StatelessServiceType") {
             $stElement = $appXml.CreateElement("StatelessService", $nsm.DefaultNamespace)
@@ -69,23 +74,19 @@ function updateAppManifest($appXml, $srvXml, $appOverridesXml) {
             $srvElement.AppendChild($stElement)
         }
 		elseif ($srvType.Name -eq "StatefulServiceType") {
-			# Don't gerenerate DefaultService entries for Actors. I'm not sure if this is the best way to tell actors from stateful services
-			$elm = ($srvType.Extensions.Extension | Where-Object {$_.Name -eq '__GeneratedServiceType__'})
-			if (!$elm.Name) {
-				$stElement = $appXml.CreateElement("StatefulService", $nsm.DefaultNamespace)
-				appendAttribute $appXml $stElement "ServiceTypeName" $srvType.ServiceTypeName
-				appendAttribute $appXml $stElement "TargetReplicaSetSize" ("["+$srvName+"_TargetReplicaSetSize]")
-				addParameter $appXml $parmElement ($srvName+"_TargetReplicaSetSize") "3"
-				appendAttribute $appXml $stElement "MinReplicaSetSize" ("["+$srvName+"_MinReplicaSetSize]")
-				addParameter $appXml $parmElement ($srvName+"_MinReplicaSetSize") "3"
-				$partElement = $appXml.CreateElement("UniformInt64Partition", $nsm.DefaultNamespace)
-				appendAttribute $appXml $partElement "PartitionCount" ("["+$srvName+"_PartitionCount]")
-				addParameter $appXml $parmElement ($srvName+"_PartitionCount") "1"
-				appendAttribute $appXml $partElement "LowKey" "-9223372036854775808"
-				appendAttribute $appXml $partElement "HighKey" "9223372036854775807"
-				$stElement.AppendChild($partElement)
-				$srvElement.AppendChild($stElement)
-			}
+			$stElement = $appXml.CreateElement("StatefulService", $nsm.DefaultNamespace)
+			appendAttribute $appXml $stElement "ServiceTypeName" $srvType.ServiceTypeName
+			appendAttribute $appXml $stElement "TargetReplicaSetSize" ("["+$srvName+"_TargetReplicaSetSize]")
+			addParameter $appXml $parmElement ($srvName+"_TargetReplicaSetSize") "3"
+			appendAttribute $appXml $stElement "MinReplicaSetSize" ("["+$srvName+"_MinReplicaSetSize]")
+			addParameter $appXml $parmElement ($srvName+"_MinReplicaSetSize") "3"
+			$partElement = $appXml.CreateElement("UniformInt64Partition", $nsm.DefaultNamespace)
+			appendAttribute $appXml $partElement "PartitionCount" ("["+$srvName+"_PartitionCount]")
+			addParameter $appXml $parmElement ($srvName+"_PartitionCount") "1"
+			appendAttribute $appXml $partElement "LowKey" "-9223372036854775808"
+			appendAttribute $appXml $partElement "HighKey" "9223372036854775807"
+			$stElement.AppendChild($partElement)
+			$srvElement.AppendChild($stElement)
 		}
     }
 

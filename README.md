@@ -4,7 +4,25 @@ SFNuGet allows you to package and share your Microsoft Azure Service Fabric serv
 
 To package your Service Fabric service as a reusable NuGet package, add a reference to SFNuGet and rebuild your solution - that's all you need to do! 
 
-Please see [this tutorial](http://haishibai.blogspot.com/2016/08/sharing-your-service-fabric-services-as.html) for more details.
+# Getting Started
+SFNuGet is a NuGet package that helps you to build NuGet packages. The source code in this repository builds the SFNuGet NuGet package itself. To author a Service Fabric package, you need to add a SFNuGet reference to your Service Fabric application. The final consumer of your service package doesn't need a SFNuGet reference.
+
+## Build SFNuGet
+1. Clone the repository
+2. Open **ReusableSFServices.sln** and rebuild the solution. 
+3. You'll find the newly built **SFNuGet._\<version\>_.nupkg** under the **SFNuGet** folder.
+
+## Tutorials
+
+* [Create a Service Fabric NuGet package](docs\Tutorial-AuthorService.md)
+* [Consume a Service Fabric NuGet package]
+
+
+# Updates
+
+## September 18, 2017
+
+*  Updated for Visual Studio 2017 and Service Fabric SDK 2.6.220.9494.
 
 # Contributing
 
