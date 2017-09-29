@@ -24,7 +24,6 @@
     <file src="Code\**\*.*" target="$serviceNamePkg\Code" />
     <file src="Config\**\*.*" target="$serviceNamePkg\Config" />
     <file src=".\ServiceManifest.xml" target="$serviceNamePkg\ServiceManifest.xml"/>
-    <file src="tools\" target="tools" />
-    <file src="content\" target="content" />
+    <file src="tools\" target="tools" />    
   </files>
 </package>

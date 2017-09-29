@@ -109,7 +109,7 @@ function updateAppManifest($appXml, $srvXml, $appOverridesXml) {
 
 	if ($srvElement.ChildNodes.Count -gt 0) {
 		$dftSrvElement.AppendChild($srvElement)
-	}
+    }
 }
 
 function updateNuspec($nugetXml, $id, $version){
@@ -147,7 +147,7 @@ if ([System.IO.Directory]::Exists("$destFolder\ApplicationPackageRoot")) {
 
 	updateAppManifest $appXml $srvXml $appOverridesXml
 
-	$appXml.Save($appMainfest)
+    $appXml.Save($appMainfest)    
 } elseif ([System.IO.File]::Exists("$destFolder\Package.nuspec")) {
     $nugetXml = [xml](Get-Content "$destFolder\Package.nuspec")
 	updateNuspec $nugetXml $package.Id $package.Version

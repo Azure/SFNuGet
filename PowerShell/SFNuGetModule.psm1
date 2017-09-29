@@ -24,8 +24,7 @@ function New-ServiceFabricNuGetPackage {
     }
 
     #copy files
-    Robocopy $InputPath $OutPath /s
-    Robocopy .\content $OutPath\content /s
+    Robocopy $InputPath $OutPath /s    
     Robocopy .\tools $OutPath\tools /s
     Copy-Item .\NuGet.exe $OutPath
     Copy-Item .\NuGet.config $OutPath
@@ -98,29 +97,15 @@ function packageService([string] $path)
     
     # Create symbols package if any .pdb files are located in the lib folder
     If ((Get-ChildItem *.pdb -Path .\lib -Recurse).Count -gt 0) {
-	    $packageTask = createProcess $path\NuGet.exe ("pack $path\Package.nuspec -Symbol -Verbosity Detailed")
-	    $packageTask.Start() | Out-Null
-	    $packageTask.WaitForExit()
-			
-	    $output = ($packageTask.StandardOutput.ReadToEnd() -Split '[\r\n]') |? {$_}
-	    $error = (($packageTask.StandardError.ReadToEnd() -Split '[\r\n]') |? {$_}) 
-	    Write-Log $output
-	    Write-Log $error Error
-
-	    $global:ExitCode = $packageTask.ExitCode
+	    $packageTask = createProcess $path\NuGet.exe ("pack $path\Package.nuspec -Symbol -Verbosity Detailed -OutputDirectory $path")
+        runProcessWaitForMessage -process $packageTask -message "Successfully created package"
+        $global:ExitCode = $packageTask.ExitCode
     }
     Else {
-	    $packageTask = createProcess $path\NuGet.exe ("pack $path\Package.nuspec -Verbosity Detailed")
-	    $packageTask.Start() | Out-Null
-	    $packageTask.WaitForExit()
-			
-	    $output = ($packageTask.StandardOutput.ReadToEnd() -Split '[\r\n]') |? {$_}
-	    $error = (($packageTask.StandardError.ReadToEnd() -Split '[\r\n]') |? {$_}) 
-	    Write-Log $output
-	    Write-Log $error Error
-
-	    $global:ExitCode = $packageTask.ExitCode
-    }
+	    $packageTask = createProcess $path\NuGet.exe ("pack $path\Package.nuspec -Verbosity Detailed -OutputDirectory $path")
+	    runProcessWaitForMessage -process $packageTask -message "Successfully created package"
+        $global:ExitCode = $packageTask.ExitCode
+    }    
 }
 
 function createProcess([string] $fileName, [string] $arguments)
@@ -136,6 +121,39 @@ function createProcess([string] $fileName, [string] $arguments)
 	$p.StartInfo = $pinfo
 
 	return $p
+}
+
+function runProcessWaitForMessage{
+    param($process, [string] $message)
+    
+    $global:message = $message
+    $global:process = $process
+
+    $OutEvent = Register-ObjectEvent -InputObject $process -EventName OutputDataReceived -Action {
+        $data = $Event.SourceEventArgs.Data
+		Write-Log $data
+        if ($data.Contains($global:message)) {
+            $global:process.Kill()
+        }
+    }
+
+	$ErrEvent = Register-ObjectEvent -InputObject $Process -EventName ErrorDataReceived -Action {
+		Write-Log $Event.SourceEventArgs.Data Error
+	}
+
+
+    $process.Start()
+    $process.BeginOutputReadLine()
+	$Process.BeginErrorReadLine()
+
+    do
+    {
+        Write-Host "Waiting for message '$message'" -ForegroundColor Green
+        Start-Sleep -Seconds 1
+    }
+    while (!$process.HasExited)
+
+    $OutEvent.Name,  $ErrEvent.Name | ForEach-Object {Unregister-Event -SourceIdentifier $_}
 }
 function Write-Log {
     
