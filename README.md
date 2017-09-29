@@ -2,15 +2,27 @@
 
 SFNuGet allows you to package and share your Microsoft Azure Service Fabric services as NuGet packages. Once your service is packaged as a NuGet package, your customers can include your service into their Service Fabric applications by simply adding a reference to your service’s NuGet package.
 
-To package your Service Fabric service as a reusable NuGet package, add a reference to SFNuGet and rebuild your solution - that's all you need to do! 
+To package your Service Fabric service as a reusable NuGet package, use the **New-ServiceFabricNuGetPackage** method in this module.
+
+> **NOTE** Previous versions of SFNuGet were packaged as NuGet packages, which are obsolete now.
+
 
 # Getting Started
-SFNuGet is a NuGet package that helps you to build NuGet packages. The source code in this repository builds the SFNuGet NuGet package itself. To author a Service Fabric package, you need to add a SFNuGet reference to your Service Fabric application. The final consumer of your service package doesn't need a SFNuGet reference.
+SFNuGet is a PowerShell module that helps you to build NuGet packages. After importing the module, you can use SFNuGet to package and publish NuGet packages for your Microsoft Azure Service Fabric services.
 
-## Build SFNuGet
+## Import SFNuGet Module
 1. Clone the repository
-2. Open **ReusableSFServices.sln** and rebuild the solution. 
-3. You'll find the newly built **SFNuGet._\<version\>_.nupkg** under the **SFNuGet** folder.
+2. Open PowerShell. 
+3. Import the SFNuGet module:
+```powershell
+Import-Module /path/to/SFNuGetModule.psd1
+```
+## Package a Service Fabric as a NuGet package
+To package a Service Fabric service, use the **New-ServiceFabricNuGetPackage** method on your service package folder. This folder usually is under the pkg\\Debug\\&lt;service name&gt;Pkg folder after your package your Service Fabric application.
+```powershell
+New-ServiceFabricNuGetPackage -InputPath <path to your Service Fabric package folder> <path to output folder>
+```
+
 
 ## Tutorials
 
@@ -19,6 +31,10 @@ SFNuGet is a NuGet package that helps you to build NuGet packages. The source co
 
 
 # Updates
+
+## September 29, 2017
+
+* SFNuGet NuGet package is now obsolete. SFNuGet will be delivered as a PowerShell module going forward.
 
 ## September 18, 2017
 

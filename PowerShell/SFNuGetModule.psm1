@@ -18,14 +18,14 @@ function New-ServiceFabricNuGetPackage {
 
     #create or clean output folder
     if (!(Test-Path $OutPath)) {
-        New-Item -ItemType Directory $OutPath -Force
+        New-Item -ItemType Directory $OutPath -Force | Out-Null
     } else {
         Remove-Item $OutPath -Recurse
     }
 
     #copy files
-    Robocopy $InputPath $OutPath /s    
-    Robocopy .\tools $OutPath\tools /s
+    Robocopy $InputPath $OutPath /S /NS /NC /NFL /NDL /NP /NJH /NJS    
+    Robocopy .\tools $OutPath\tools /S /NS /NC /NFL /NDL /NP /NJH /NJS
     Copy-Item .\NuGet.exe $OutPath
     Copy-Item .\NuGet.config $OutPath
 
