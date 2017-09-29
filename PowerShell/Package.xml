@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>$serviceName</id>
+    <version>$serviceVersion</version>
+    <title>$assemblyTitle</title>
+    <authors>$assemblyCompany</authors>
+    <owners></owners>
+    <description>$assemblyDescription</description>
+    <releaseNotes>
+    </releaseNotes>
+    <summary>$assemblyDescription</summary>
+    <language>en-US</language>
+    <projectUrl>https://nuget.org/packages/$assemblyName</projectUrl>
+    <iconUrl>https://nuget.org/Content/Images/packageDefaultIcon-50x50.png</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <licenseUrl>http://opensource.org/licenses/Apache-2.0</licenseUrl>
+    <copyright>$copyRight</copyright>
+    <dependencies></dependencies>
+    <references></references>
+    <tags>SFNuGet</tags>
+  </metadata>
+  <files>
+    <file src="Code\**\*.*" target="$serviceNamePkg\Code" />
+    <file src="Config\**\*.*" target="$serviceNamePkg\Config" />
+    <file src="tools\" target="tools" />
+    <file src="content\" target="content" />
+  </files>
+</package>
