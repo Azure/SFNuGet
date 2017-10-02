@@ -30,9 +30,12 @@ function New-ServiceFabricNuGetPackage {
     Copy-Item .\NuGet.config $OutPath
 
     #find serice process
-    $execFile = Get-ChildItem $OutPath\Code *.exe | Select-Object -First 1
-
-    updateSpecFile .\Package.xml $OutPath\ServiceManifest.xml $OutPath\Code\$execFile $OutPath\Package.nuspec
+    if (Test-Path $OutPath\Code) {
+        $execFile = Get-ChildItem $OutPath\Code *.exe | Select-Object -First 1
+        updateSpecFile .\Package.xml $OutPath\ServiceManifest.xml $OutPath\Code\$execFile $OutPath\Package.nuspec
+    } else {
+        updateSpecFileForContainer .\Package.xml $OutPath\ServiceManifest.xml $OutPath\Package.nuspec
+    }
 
     if (isServicePackagePath $InputPath) {
         packageService $OutPath
@@ -43,6 +46,38 @@ function Publish-ServiceFabricNuGetPackage {
 
 }
 
+function updateSpecFileForContainer([string]$specFile, [string]$srvManifest, [string] $targetSpecFile)
+{
+    $manifest = [xml](Get-Content $srvManifest)
+    $name = $manifest.DocumentElement.Attributes["Name"].Value
+	if ($name.EndsWith("Pkg")) {$name = $name.Substring(0, $name.Length-3)}
+    $version = $manifest.DocumentElement.Attributes["Version"].Value
+
+    $container = ($manifest.ServiceManifest.CodePackage.EntryPoint.ContainerHost)
+    if ($container){
+        $contentXml = [xml] (Get-Content $specFile)
+        replaceString $contentXml "`$serviceName" $name        
+        replaceString $contentXml "`$serviceNamePkg" $name + "Pkg"
+        replaceString $contentXml "`$serviceVersion" $version
+        replaceString $contentXml "`$assemblyTitle" (&{If($container.ImageName) {$container.ImageName} Else {"Container"}})
+        replaceString $contentXml "`$assemblyCompany" "Company"        
+        replaceString $contentXml "`$assemblyDescription" "Unknown"
+        replaceString $contentXml "`$copyRight" "Unknown"	
+        $codeNode = $contentXml | Select-Xml -Xpath "//files/file[@src='Code\**\*.*']" | Select-Object -Exp Node
+        $codeNode.ParentNode.RemoveChild($codeNode)
+        $contentXml.Save($targetSpecFile)
+    }    
+}
+function replaceString([xml]$xmlDoc, [string]$searchPattern, [string]$newString) {
+    $nodes = $xmlDoc | Select-Xml -Xpath "//*/text()[contains(.,'$searchpattern')]" | Select-Object -Exp Node
+    Foreach($node in $nodes) {     
+        $node.ParentNode.'#text' = $node.ParentNode.'#text'.Replace($searchPattern, $newString)
+    }
+    $nodes = $xmlDoc | Select-Xml -Xpath "//*/@*[contains(.,'`$serviceNamePkg')]" | Select-Object -Exp Node
+    Foreach($node in $nodes) {     
+        $node.Value = $node.Value.Replace($searchPattern, $newString)
+    }
+}
 function updateSpecFile([string]$specFile, [string]$srvManifest, $executable, [string] $targetSpecFile)
 {
 	$manifest = [xml](Get-Content $srvManifest)
@@ -51,19 +86,20 @@ function updateSpecFile([string]$specFile, [string]$srvManifest, $executable, [s
     $version = $manifest.DocumentElement.Attributes["Version"].Value
     $assembly = [System.Reflection.Assembly]::LoadFrom($executable)
 
-	$content = Get-Content($specFile)
-    $content = $content.Replace("`$serviceName",$name)
-    $content = $content.Replace("`$serviceNamePkg",$name + "Pkg")
-	$content = $content.Replace("`$serviceVersion",$version)
-    $content = $content.Replace("`$assemblyTitle",$assembly.GetCustomAttributes([System.Reflection.AssemblyTitleAttribute], $false).Title)
+    $contentXml = [xml] (Get-Content $specFile)
+	
+    replaceString $contentXml "`$serviceName" $name
+    replaceString $contentXml "`$serviceNamePkg" $name + "Pkg"
+	replaceString $contentXml "`$serviceVersion" $version
+    replaceString $contentXml "`$assemblyTitle" $assembly.GetCustomAttributes([System.Reflection.AssemblyTitleAttribute], $false).Title
     
     $company = $assembly.GetCustomAttributes([System.Reflection.AssemblyCompanyAttribute], $false).Company
-    $content = $content.Replace("`$assemblyCompany", (&{If($company) {$company} Else {"Company"}}))
+    replaceString $contentXml "`$assemblyCompany" (&{If($company) {$company} Else {"Company"}})
     
     $description = $assembly.GetCustomAttributes([System.Reflection.AssemblyDescriptionAttribute], $false).Description    
-	$content = $content.Replace("`$assemblyDescription",(&{If($description) {$description} Else {"Description"}}))
-	$content = $content.Replace("`$copyRight",$assembly.GetCustomAttributes([System.Reflection.AssemblyCopyrightAttribute], $false).Copyright)	
-	$content | Out-File $targetSpecFile
+	replaceString $contentXml "`$assemblyDescription" (&{If($description) {$description} Else {"Description"}})
+	replaceString $contentXml "`$copyRight" $assembly.GetCustomAttributes([System.Reflection.AssemblyCopyrightAttribute], $false).Copyright	
+	$contentXml.Save($targetSpecFile)
 }
 function isServicePackagePath([string] $path)
 {    

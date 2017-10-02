@@ -62,16 +62,20 @@ function updateAppManifest($appXml, $srvXml, $appOverridesXml) {
 	#if ($elm.Name) {
 	#	appendAttribute $appXml $srvElement "GeneratedIdRef" $elm.GeneratedId
 	#}
+    #$srvXml.ServiceManifest.CodePackage.EntryPoint.ContainerHost) {Write-Host "OK"}
 
     Foreach($srvType in $srvXml.ServiceManifest.ServiceTypes.ChildNodes) {
         if ($srvType.Name -eq "StatelessServiceType") {
             $stElement = $appXml.CreateElement("StatelessService", $nsm.DefaultNamespace)
             appendAttribute $appXml $stElement "ServiceTypeName" $srvType.ServiceTypeName
-            appendAttribute $appXml $stElement "InstanceCount" ("["+$srvName+"_InstanceCount]")
+            appendAttribute $appXml $stElement "InstanceCount" ("["+$srvName+"_InstanceCount]")            
             $partElement = $appXml.CreateElement("SingletonPartition", $nsm.DefaultNamespace)
 			addParameter $appXml $parmElement ($srvName+"_InstanceCount") "-1"
             $stElement.AppendChild($partElement)
             $srvElement.AppendChild($stElement)
+            if ($srvType.UseImplicitHost) {
+                appendAttribute $appXml $srvElement "ServicePackageActivationMode" "ExclusiveProcess"
+            }
         }
 		elseif ($srvType.Name -eq "StatefulServiceType") {
 			$stElement = $appXml.CreateElement("StatefulService", $nsm.DefaultNamespace)
