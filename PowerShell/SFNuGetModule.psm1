@@ -32,7 +32,12 @@ function New-ServiceFabricNuGetPackage {
     #find serice process
     if (Test-Path $OutPath\Code) {
         $execFile = Get-ChildItem $OutPath\Code *.exe | Select-Object -First 1
-        updateSpecFile .\Package.xml $OutPath\ServiceManifest.xml $OutPath\Code\$execFile $OutPath\Package.nuspec
+        $webConfig = Get-ChildItem $OutPah\Code web.config | Select-Object -First 1
+        if ($webConfig){
+            updateSpecFile .\Package.xml $OutPath\ServiceManifest.xml $OutPath\Code\$execFile $OutPath\Package.nuspec $true
+        } else {
+            updateSpecFile .\Package.xml $OutPath\ServiceManifest.xml $OutPath\Code\$execFile $OutPath\Package.nuspec $false 
+        }
     } else {
         updateSpecFileForContainer .\Package.xml $OutPath\ServiceManifest.xml $OutPath\Package.nuspec
     }
@@ -78,7 +83,7 @@ function replaceString([xml]$xmlDoc, [string]$searchPattern, [string]$newString)
         $node.Value = $node.Value.Replace($searchPattern, $newString)
     }
 }
-function updateSpecFile([string]$specFile, [string]$srvManifest, $executable, [string] $targetSpecFile)
+function updateSpecFile([string]$specFile, [string]$srvManifest, $executable, [string] $targetSpecFile, [bool]$isWeb)
 {
 	$manifest = [xml](Get-Content $srvManifest)
 	$name = $manifest.DocumentElement.Attributes["Name"].Value
@@ -98,7 +103,10 @@ function updateSpecFile([string]$specFile, [string]$srvManifest, $executable, [s
     
     $description = $assembly.GetCustomAttributes([System.Reflection.AssemblyDescriptionAttribute], $false).Description    
 	replaceString $contentXml "`$assemblyDescription" (&{If($description) {$description} Else {"Description"}})
-	replaceString $contentXml "`$copyRight" $assembly.GetCustomAttributes([System.Reflection.AssemblyCopyrightAttribute], $false).Copyright	
+    replaceString $contentXml "`$copyRight" $assembly.GetCustomAttributes([System.Reflection.AssemblyCopyrightAttribute], $false).Copyright	
+    if ($isWeb){
+        $contentXml.package.metadata.tags = (&{If($contentXml.package.metadata.tags) {$contentXml.package.metadata.tags + ", Web"} Else {"Web"}})
+    }
 	$contentXml.Save($targetSpecFile)
 }
 function isServicePackagePath([string] $path)
