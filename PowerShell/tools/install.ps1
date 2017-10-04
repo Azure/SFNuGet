@@ -1,4 +1,7 @@
-﻿# Runs every time a package is installed in a project
+﻿# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT license.
+
+# Runs every time a package is installed in a project
 
 param($installPath, $toolsPath, $package, $project)
 
@@ -29,7 +32,7 @@ function addParameter($appXml, $parms, $parmName, $parmValue){
     appendAttribute $appXml $parm "DefaultValue" $parmValue
 	$parms.AppendChild($parm)
 }
-function updateAppManifest($appXml, $srvXml, $appOverridesXml) {
+function updateAppManifest($appXml, $srvXml, $appOverridesXml, $isWeb) {
     $nsm = New-Object System.Xml.XmlNamespaceManager($appXml.NameTable)
     $nsm.AddNamespace("xsd", "http://www.w3.org/2001/XMLSchema")
     $nsm.AddNamespace("xsi", "http://www.w3.org/2001/XMLSchema-instance")
@@ -57,7 +60,12 @@ function updateAppManifest($appXml, $srvXml, $appOverridesXml) {
     $srvElement = $appXml.CreateElement("Service", $nsm.DefaultNamespace)
 	$srvName = $srvXml.ServiceManifest.Name.Substring(0, $srvXml.ServiceManifest.Name.Length-3)
     appendAttribute $appXml $srvElement "Name" $srvName
-
+    if ($isWeb) {
+        $node = $srvXml.ServiceManifest.ServiceTypes.ChildNodes | Where-Object {$_.ServiceTypeName -eq $srvName+'Type'} | Select-Object
+        if (!($node.Name -eq 'StatefulServiceType')) {
+            appendAttribute $appXml $srvElement "ServicePackageActivationMode" "ExclusiveProcess"
+        }
+    }
 	#$elm = ($srvType.Extensions.Extension | Where-Object {$_.Name -eq '__GeneratedServiceType__'})
 	#if ($elm.Name) {
 	#	appendAttribute $appXml $srvElement "GeneratedIdRef" $elm.GeneratedId
@@ -141,6 +149,8 @@ if ([System.IO.Directory]::Exists("$destFolder\ApplicationPackageRoot")) {
 	$srvManifest = "$srcFolder\ServiceManifest.xml"
 	$appManifestOverrides = "$srcFolder\ApplicationManifest.overrides.xml"
 
+    $webConfig = Get-ChildItem $srcFolder\Code web.config | Select-Object -First 1
+
 	$appXml = [xml](Get-Content $appMainfest)
 	$srvXml = [xml](Get-Content $srvManifest)
 	if ([System.IO.File]::Exists($appManifestOverrides)) {
@@ -149,7 +159,7 @@ if ([System.IO.Directory]::Exists("$destFolder\ApplicationPackageRoot")) {
 		$appOverridesXml = $null
 	}
 
-	updateAppManifest $appXml $srvXml $appOverridesXml
+	updateAppManifest $appXml $srvXml $appOverridesXml (&{If($webConfig) {$true} Else {$false}})
 
     $appXml.Save($appMainfest)    
 } elseif ([System.IO.File]::Exists("$destFolder\Package.nuspec")) {

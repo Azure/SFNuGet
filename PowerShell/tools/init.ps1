@@ -1,4 +1,7 @@
-﻿# Runs the first time a package is installed in a solution, and every time the solution is opened.
+﻿# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT license.
+
+# Runs the first time a package is installed in a solution, and every time the solution is opened.
 
 param($installPath, $toolsPath, $package, $project)
 

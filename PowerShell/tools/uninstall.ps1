@@ -1,4 +1,7 @@
-﻿# Runs every time a package is uninstalled
+﻿# Copyright (c) Microsoft Corporation. All rights reserved.
+# Licensed under the MIT license.
+
+# Runs every time a package is uninstalled
 
 param($installPath, $toolsPath, $package, $project)
 
