@@ -124,48 +124,32 @@ function updateAppManifest($appXml, $srvXml, $appOverridesXml, $isWeb) {
     }
 }
 
-function updateNuspec($nugetXml, $id, $version){
-    $count= $nugetXml.package.metadata.GetElementsByTagName("dependencies").Count
-    if ($count -eq 0){
-        $dependencies = $nugetXml.CreateElement("dependencies")
-        $nugetXml.package.metadata.AppendChild($dependencies)        
-    } else {
-        $dependencies = $nugetXml.package.metadata.GetElementsByTagName("dependencies")[0]
-    }
-    $dependency = $nugetXml.CreateElement("dependency")
-    appendAttribute $nugetXml $dependency "id" $id
-    appendAttribute $nugetXml $dependency "version" $version
-    $dependencies.AppendChild($dependency)
-}
-
-$srcFolder = Get-Item $installPath\*Pkg | Where-Object {$_.Mode -match 'd'}
+$srcFolders = Get-Item $installPath\*Pkg | Where-Object {$_.Mode -match 'd'}
 $destFolder = getProjectDirectory($project)
 
 if ([System.IO.Directory]::Exists("$destFolder\ApplicationPackageRoot")) {
-	$destFolder = "$destFolder\ApplicationPackageRoot"
-	addFiles $project $srcFolder ($destFolder+"\"+$srcFolder.Name)
+    $destFolder = "$destFolder\ApplicationPackageRoot"
+    Foreach($srcFolder in $srcFolders) {
+        addFiles $project $srcFolder ($destFolder+"\"+$srcFolder.Name)
+    
+	    $appMainfest = "$destFolder\ApplicationManifest.xml"
+	    $srvManifest = "$srcFolder\ServiceManifest.xml"
+	    $appManifestOverrides = "$srcFolder\ApplicationManifest.overrides.xml"
 
-	$appMainfest = "$destFolder\ApplicationManifest.xml"
-	$srvManifest = "$srcFolder\ServiceManifest.xml"
-	$appManifestOverrides = "$srcFolder\ApplicationManifest.overrides.xml"
+        $webConfig = Get-ChildItem $srcFolder\Code web.config | Select-Object -First 1
 
-    $webConfig = Get-ChildItem $srcFolder\Code web.config | Select-Object -First 1
+	    $appXml = [xml](Get-Content $appMainfest)
+	    $srvXml = [xml](Get-Content $srvManifest)
+	    if ([System.IO.File]::Exists($appManifestOverrides)) {
+		    $appOverridesXml = [xml](Get-Content $appManifestOverrides)
+	    } else {
+		    $appOverridesXml = $null
+	    }
 
-	$appXml = [xml](Get-Content $appMainfest)
-	$srvXml = [xml](Get-Content $srvManifest)
-	if ([System.IO.File]::Exists($appManifestOverrides)) {
-		$appOverridesXml = [xml](Get-Content $appManifestOverrides)
-	} else {
-		$appOverridesXml = $null
-	}
-
-	updateAppManifest $appXml $srvXml $appOverridesXml (&{If($webConfig) {$true} Else {$false}})
-
-    $appXml.Save($appMainfest)    
-} elseif ([System.IO.File]::Exists("$destFolder\Package.nuspec")) {
-    $nugetXml = [xml](Get-Content "$destFolder\Package.nuspec")
-	updateNuspec $nugetXml $package.Id $package.Version
-    $nugetXml.Save("$destFolder\Package.nuspec")
+        updateAppManifest $appXml $srvXml $appOverridesXml (&{If($webConfig) {$true} Else {$false}})
+        $appXml.Save($appMainfest)    
+    }
+    
 } else {
 	Write-Error "SFNuGet can't be installed for this project type."
 	exit 1
