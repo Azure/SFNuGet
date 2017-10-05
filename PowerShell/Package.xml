@@ -20,10 +20,7 @@
     <references></references>
     <tags>SFNuGet</tags>
   </metadata>
-  <files>
-    <file src="Code\**\*.*" target="$serviceNamePkg\Code" />
-    <file src="Config\**\*.*" target="$serviceNamePkg\Config" />
-    <file src=".\ServiceManifest.xml" target="$serviceNamePkg\ServiceManifest.xml"/>
+  <files>   
     <file src="tools\" target="tools" />    
   </files>
 </package>

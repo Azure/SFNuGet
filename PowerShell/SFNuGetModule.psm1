@@ -32,24 +32,52 @@ function New-ServiceFabricNuGetPackage {
     Copy-Item .\NuGet.exe $OutPath
     Copy-Item .\NuGet.config $OutPath
 
-    #find serice process
-    if (Test-Path $OutPath\Code) {
-        $execFile = Get-ChildItem $OutPath\Code *.exe | Select-Object -First 1
-        updateSpecFile .\Package.xml $OutPath\ServiceManifest.xml $OutPath\Code\$execFile $OutPath\Package.nuspec
-    } else {
-        updateSpecFileForContainer .\Package.xml $OutPath\ServiceManifest.xml $OutPath\Package.nuspec
-    }
-
-    if (isServicePackagePath $InputPath) {
+    if (isAppPackagePath $InputPath) {
+        $folders = Get-ChildItem $OutPath | ?{$_.PSIsContainer}
+        $first = $true
+        Foreach($folder in $folders) {
+            $svcFolder = Join-Path $InputPath $folder
+            if (isServicePackagePath $svcFolder) {
+                updateSpecFieForService $svcFolder $svcFolder\ServiceManifest.xml $OutPath\Package.nuspec $folder $first
+                $first = $false
+            }
+        }
         packageService $OutPath
+    } elseif (isServicePackagePath $InputPath) {
+        updateSpecFieForService $OutPath $InputPath\ServiceManifest.xml $OutPath\Package.nuspec $null $true
+        packageService $OutPath
+    }   else {
+        Write-Host "Please point to either a Service Application package folder or a Service package folder."
     }
+}
+
+function updateSpecFieForService ([string]$path, [string]$svcManifestFile, [string]$specFile, [string]$svcFolder, [bool]$first) { 
+    $manifest = [xml](Get-Content $svcManifestFile)
+    $name = $manifest.DocumentElement.Attributes["Name"].Value
+    if ($name.EndsWith("Pkg")) {$name = $name.Substring(0, $name.Length-3)}
+    
+    if ($first) {
+        if (Test-Path $path\Code) {
+            $execFile = Get-ChildItem $path\Code *.exe | Select-Object -First 1
+            updateSpecFile .\Package.xml $svcManifestFile $path\Code\$execFile $specFile $svcFolder
+        } else {
+            updateSpecFileForContainer .\Package.xml $svcManifestFile $specFile $svcFolder
+        }
+    }
+    $specXml = [xml](Get-Content $specFile)
+    
+    appendFileElement $specXml (&{If($svcFolder) {"$svcFolder\Code\**\*.*"} Else {"Code\**\*.*"}}) ($name + "Pkg\Code")
+    appendFileElement $specXml (&{If($svcFolder) {"$svcFolder\Config\**\*.*"} Else {"Config\**\*.*"}}) ($name + "Pkg\Config")
+    appendFileElement $specXml (&{If($svcFolder) {"$svcFolder\ServiceManifest.xml"} Else {".\ServiceManifest.xml"}}) ($name + "Pkg\ServiceManifest.xml")    
+
+    $specXml.Save($specFile)
 }
 
 function Publish-ServiceFabricNuGetPackage {
 
 }
 
-function updateSpecFileForContainer([string]$specFile, [string]$srvManifest, [string] $targetSpecFile)
+function updateSpecFileForContainer([string]$specFile, [string]$srvManifest, [string] $targetSpecFile, [string]$svcFolder)
 {
     $manifest = [xml](Get-Content $srvManifest)
     $name = $manifest.DocumentElement.Attributes["Name"].Value
@@ -66,11 +94,25 @@ function updateSpecFileForContainer([string]$specFile, [string]$srvManifest, [st
         replaceString $contentXml "`$assemblyCompany" "Company"        
         replaceString $contentXml "`$assemblyDescription" "Unknown"
         replaceString $contentXml "`$copyRight" "Unknown"	
-        $codeNode = $contentXml | Select-Xml -Xpath "//files/file[@src='Code\**\*.*']" | Select-Object -Exp Node
-        $codeNode.ParentNode.RemoveChild($codeNode)
+        #$codeNode = $contentXml | Select-Xml -Xpath "//files/file[@src='Code\**\*.*']" | Select-Object -Exp Node
+        #$codeNode.ParentNode.RemoveChild($codeNode)
         $contentXml.Save($targetSpecFile)
     }    
 }
+
+function appendFileElement([xml]$xmlDoc,[string]$src,[string]$target) {
+    $element = $xmlDoc.CreateElement("file")
+    appendAttribute $xmlDoc $element "src" $src
+    appendAttribute $xmlDoc $element "target" $target
+    $xmlDoc.package.files.AppendChild($element)
+}
+
+function appendAttribute($xml, $element, [string]$name, [string]$value) {
+    $attribute = $xml.CreateAttribute($name)
+    $attribute.Value = $value
+    $element.Attributes.Append($attribute)
+}
+
 function replaceString([xml]$xmlDoc, [string]$searchPattern, [string]$newString) {
     $nodes = $xmlDoc | Select-Xml -Xpath "//*/text()[contains(.,'$searchpattern')]" | Select-Object -Exp Node
     Foreach($node in $nodes) {     
@@ -81,7 +123,7 @@ function replaceString([xml]$xmlDoc, [string]$searchPattern, [string]$newString)
         $node.Value = $node.Value.Replace($searchPattern, $newString)
     }
 }
-function updateSpecFile([string]$specFile, [string]$srvManifest, $executable, [string] $targetSpecFile)
+function updateSpecFile([string]$specFile, [string]$srvManifest, $executable, [string] $targetSpecFile, [string]$svcFolder)
 {
 	$manifest = [xml](Get-Content $srvManifest)
 	$name = $manifest.DocumentElement.Attributes["Name"].Value
@@ -102,7 +144,7 @@ function updateSpecFile([string]$specFile, [string]$srvManifest, $executable, [s
     $description = $assembly.GetCustomAttributes([System.Reflection.AssemblyDescriptionAttribute], $false).Description    
 	replaceString $contentXml "`$assemblyDescription" (&{If($description) {$description} Else {"Description"}})
     replaceString $contentXml "`$copyRight" $assembly.GetCustomAttributes([System.Reflection.AssemblyCopyrightAttribute], $false).Copyright	
-    
+
 	$contentXml.Save($targetSpecFile)
 }
 function isServicePackagePath([string] $path)
@@ -110,6 +152,10 @@ function isServicePackagePath([string] $path)
     return Test-Path (Join-Path $path "ServiceManifest.xml")   
 }
 
+function isAppPackagePath([string] $path)
+{
+    return Test-Path (Join-Path $path "ApplicationManifest.xml")
+}
 function packageService([string] $path)
 {    
     #make nuget.exe writable
