@@ -4,7 +4,8 @@
 function New-ServiceFabricNuGetPackage {
     param(
         [string] $InputPath,
-        [string] $OutPath
+        [string] $OutPath,
+        [switch] $Publish=$false
     )
     
     #chek if path exists
@@ -48,7 +49,81 @@ function New-ServiceFabricNuGetPackage {
         packageService $OutPath
     }   else {
         Write-Host "Please point to either a Service Application package folder or a Service package folder."
+        $global:ExitCode = 1
     }
+    if ($Publish -and $global:ExitCode -eq 0) {
+        publish $OutPath
+    }
+}
+
+function publish {
+    param([string] $outputPath)
+
+	Write-Log " "
+	Write-Log "Publishing package..." -ForegroundColor Green
+
+	# Get nuget config
+	[xml]$nugetConfig = Get-Content $outputPath\NuGet.Config
+	
+	$nugetConfig.configuration.packageSources.add | ForEach-Object {
+		$url = $_.value
+
+		Write-Log "Repository Url: $url"
+		Write-Log " "
+
+		Get-ChildItem $outputPath *.nupkg | Where-Object { $_.Name.EndsWith(".symbols.nupkg") -eq $false } | ForEach-Object { 
+
+			# Try to push package
+			$task = Create-Process $outputPath\NuGet.exe ("push " + $outputPath + "\" + $_.Name + " -Source " + $url)
+			$task.Start() | Out-Null
+			$task.WaitForExit()
+			
+			$output = ($task.StandardOutput.ReadToEnd() -Split '[\r\n]') |? { $_ }
+			$error = ($task.StandardError.ReadToEnd() -Split '[\r\n]') |? { $_ }
+			Write-Log $output
+			Write-Log $error Error
+		   
+			if ($task.ExitCode -gt 0) {
+				handlePublishError -ErrorMessage $error
+				#Write-Log ("HandlePublishError() Exit Code: " + $global:ExitCode)
+			}
+			else {
+				$global:ExitCode = 0
+			}                
+		}
+	}
+}
+
+function handlePublishError {
+	param([string] $ErrorMessage)
+
+	# Run NuGet Setup
+	$encodedMessage = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($ErrorMessage))
+	$setupTask = Start-Process PowerShell.exe "-ExecutionPolicy Unrestricted -File .\NuGetSetup.ps1 -Url $url -Base64EncodedMessage $encodedMessage" -Wait -PassThru
+
+	#Write-Log ("NuGet Setup Task Exit Code: " + $setupTask.ExitCode)
+
+	if ($setupTask.ExitCode -eq 0) {
+		# Try to push package again
+		$publishTask = Create-Process .\NuGet.exe ("push " + $_.Name + " -Source " + $url)
+		$publishTask.Start() | Out-Null
+		$publishTask.WaitForExit()
+			
+		$output = ($publishTask.StandardOutput.ReadToEnd() -Split '[\r\n]') |? {$_}
+		$error = (($publishTask.StandardError.ReadToEnd() -Split '[\r\n]') |? {$_}) 
+		Write-Log $output
+		Write-Log $error Error
+
+		if ($publishTask.ExitCode -eq 0) {
+			$global:ExitCode = 0
+		}
+	}
+	elseif ($setupTask.ExitCode -eq 2) {
+		$global:ExitCode = 2
+	}
+	else {
+		$global:ExitCode = 0
+	}
 }
 
 function updateSpecFieForService ([string]$path, [string]$svcManifestFile, [string]$specFile, [string]$svcFolder, [bool]$first) { 
@@ -74,8 +149,28 @@ function updateSpecFieForService ([string]$path, [string]$svcManifestFile, [stri
 }
 
 function Publish-ServiceFabricNuGetPackage {
-
+    param(
+        [string] $OutPath
+    )
+    publish $OutPath
 }
+
+function Create-Process() {
+	param([string] $fileName, [string] $arguments)
+
+	$pinfo = New-Object System.Diagnostics.ProcessStartInfo
+	$pinfo.RedirectStandardError = $true
+	$pinfo.RedirectStandardOutput = $true
+	$pinfo.UseShellExecute = $false
+	$pinfo.FileName = $fileName
+	$pinfo.Arguments = $arguments
+
+	$p = New-Object System.Diagnostics.Process
+	$p.StartInfo = $pinfo
+
+	return $p
+}
+
 
 function updateSpecFileForContainer([string]$specFile, [string]$srvManifest, [string] $targetSpecFile, [string]$svcFolder)
 {
@@ -241,6 +336,7 @@ function runProcessWaitForMessage{
 
     $OutEvent.Name,  $ErrEvent.Name | ForEach-Object {Unregister-Event -SourceIdentifier $_}
 }
+
 function Write-Log {
     
         #region Parameters
