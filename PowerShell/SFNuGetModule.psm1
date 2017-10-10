@@ -2,61 +2,104 @@
 #is Licensed under the MIT license.
 
 function New-ServiceFabricNuGetPackage {
+    <#
+        .SYNOPSIS
+            Package one or more Service Fabric services into a reusable NuGet package.
+    
+        .DESCRIPTION
+            This function packages one or more Service Fabric services into a reusable NuGet package. Your customers will be able to include your services into their Service Fabric applications by simply adding a reference to your NuGet package. You can use this function against a folder of a Service Fabric service package, or a folder of a Service Fabric application package.
+    
+        .PARAMETER InputPath
+            A folder of a Service Fabric service package or a Service Fabric application package.
+    
+        .PARAMETER OutPath
+            The output path where the generated NuGet package is saved.
+    
+        .PARAMETER Publish
+            To publish the NuGet package once built.
+    
+        .EXAMPLE
+            New-ServiceFabricNuGetPackage /path/to/service/package /output/folder -publish
+    
+        .NOTES
+            Revision History:
+                10/09/2017 : Haishi Bai - Created.
+    #>
     param(
         [string] $InputPath,
         [string] $OutPath,
         [switch] $Publish=$false
     )
     
-    #chek if path exists
+    #chek if InputPath exists
     if (!$InputPath -Or !(Test-Path $InputPath)) {
         Write-Host "Input path is null or not found."
         Exit 1
     }
     
-    #check if output parameter is null
+    #check if OutPath parameter is null
     if (!$OutPath) {
         Write-Host "Output path is null."
         Exit 1
     }
 
-    #create or clean output folder
+    #create output folder if doesn't exists
     if (!(Test-Path $OutPath)) {
         New-Item -ItemType Directory $OutPath -Force | Out-Null
-    } else {
-        Remove-Item $OutPath -Recurse
     }
 
+    #create a temp folder and load files to it
+    $WorkingFolder = New-TemporaryDirectory
     #copy files
-    Robocopy $InputPath $OutPath /S /NS /NC /NFL /NDL /NP /NJH /NJS    
-    Robocopy .\tools $OutPath\tools /S /NS /NC /NFL /NDL /NP /NJH /NJS
-    Copy-Item .\NuGet.exe $OutPath
-    Copy-Item .\NuGet.config $OutPath
+    Robocopy $InputPath $WorkingFolder /S /NS /NC /NFL /NDL /NP /NJH /NJS    
+    Robocopy .\tools $WorkingFolder\tools /S /NS /NC /NFL /NDL /NP /NJH /NJS
+    Copy-Item .\NuGet.exe $WorkingFolder
+    Copy-Item .\NuGet.config $WorkingFolder
 
-    if (isAppPackagePath $InputPath) {
-        $folders = Get-ChildItem $OutPath | ?{$_.PSIsContainer}
+    if (Test-AppPackagePath $InputPath) {
+        #This is an application package folder, package all services under the folder
+        $folders = Get-ChildItem $WorkingFolder | ?{$_.PSIsContainer}
         $first = $true
         Foreach($folder in $folders) {
             $svcFolder = Join-Path $InputPath $folder
-            if (isServicePackagePath $svcFolder) {
-                updateSpecFieForService $svcFolder $svcFolder\ServiceManifest.xml $OutPath\Package.nuspec $folder $first
+            if (Test-ServicePackagePath $svcFolder) {
+                Update-ServicePackageFiles $svcFolder $svcFolder\ServiceManifest.xml $WorkingFolder\Package.nuspec $folder $first
                 $first = $false
             }
         }
-        packageService $OutPath
-    } elseif (isServicePackagePath $InputPath) {
-        updateSpecFieForService $OutPath $InputPath\ServiceManifest.xml $OutPath\Package.nuspec $null $true
-        packageService $OutPath
+        New-ServicePackage $WorkingFolder $OutPath
+    } elseif (Test-ServicePackagePath $InputPath) {
+        #This is a service package folder, package the single service
+        Update-ServicePackageFiles $WorkingFolder $InputPath\ServiceManifest.xml $WorkingFolder\Package.nuspec $null $true
+        New-ServicePackage $WorkingFolder $OutPath
     }   else {
+        Remove-TemporaryDirectory $WorkingFolder
         Write-Host "Please point to either a Service Application package folder or a Service package folder."
         $global:ExitCode = 1
     }
+    
     if ($Publish -and $global:ExitCode -eq 0) {
-        publish $OutPath
+        Publish-ServicePackage $WorkingFolder
     }
+    
+    Remove-TemporaryDirectory $WorkingFolder
 }
 
-function publish {
+function  New-TemporaryDirectory {
+    $parent = [System.IO.Path]::GetTempPath()
+    [string] $name = (Join-Path $parent ("SFNuGet\" + [System.Guid]::NewGuid()))
+    New-Item -ItemType Directory -Path $name | Out-Null
+    return $name
+}
+
+function Remove-TemporaryDirectory{
+    param(
+        [string] $path
+    )
+    Remove-Item $path -Force -Recurse | Out-Null
+} 
+
+function Publish-ServicePackage {
     param([string] $outputPath)
 
 	Write-Log " "
@@ -74,7 +117,7 @@ function publish {
 		Get-ChildItem $outputPath *.nupkg | Where-Object { $_.Name.EndsWith(".symbols.nupkg") -eq $false } | ForEach-Object { 
 
 			# Try to push package
-			$task = Create-Process $outputPath\NuGet.exe ("push " + $outputPath + "\" + $_.Name + " -Source " + $url)
+			$task = New-ProcessStartInfo $outputPath\NuGet.exe ("push " + $outputPath + "\" + $_.Name + " -Source " + $url)
 			$task.Start() | Out-Null
 			$task.WaitForExit()
 			
@@ -84,8 +127,7 @@ function publish {
 			Write-Log $error Error
 		   
 			if ($task.ExitCode -gt 0) {
-				handlePublishError -ErrorMessage $error
-				#Write-Log ("HandlePublishError() Exit Code: " + $global:ExitCode)
+				Resolve-PublishError -ErrorMessage $error
 			}
 			else {
 				$global:ExitCode = 0
@@ -94,18 +136,18 @@ function publish {
 	}
 }
 
-function handlePublishError {
-	param([string] $ErrorMessage)
+function Resolve-PublishError {
+	param (
+        [string] $ErrorMessage
+    )
 
 	# Run NuGet Setup
 	$encodedMessage = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($ErrorMessage))
 	$setupTask = Start-Process PowerShell.exe "-ExecutionPolicy Unrestricted -File .\NuGetSetup.ps1 -Url $url -Base64EncodedMessage $encodedMessage" -Wait -PassThru
 
-	#Write-Log ("NuGet Setup Task Exit Code: " + $setupTask.ExitCode)
-
 	if ($setupTask.ExitCode -eq 0) {
 		# Try to push package again
-		$publishTask = Create-Process .\NuGet.exe ("push " + $_.Name + " -Source " + $url)
+		$publishTask = Start-Process .\NuGet.exe ("push " + $_.Name + " -Source " + $url)
 		$publishTask.Start() | Out-Null
 		$publishTask.WaitForExit()
 			
@@ -126,7 +168,15 @@ function handlePublishError {
 	}
 }
 
-function updateSpecFieForService ([string]$path, [string]$svcManifestFile, [string]$specFile, [string]$svcFolder, [bool]$first) { 
+function Update-ServicePackageFiles{
+    param (
+        [string]$path, 
+        [string]$svcManifestFile, 
+        [string]$specFile, 
+        [string]$svcFolder, 
+        [bool]$first
+    ) 
+
     $manifest = [xml](Get-Content $svcManifestFile)
     $name = $manifest.DocumentElement.Attributes["Name"].Value
     if ($name.EndsWith("Pkg")) {$name = $name.Substring(0, $name.Length-3)}
@@ -134,16 +184,16 @@ function updateSpecFieForService ([string]$path, [string]$svcManifestFile, [stri
     if ($first) {
         if (Test-Path $path\Code) {
             $execFile = Get-ChildItem $path\Code *.exe | Select-Object -First 1
-            updateSpecFile .\Package.xml $svcManifestFile $path\Code\$execFile $specFile $svcFolder
+            Update-SpecFile .\Package.xml $svcManifestFile $path\Code\$execFile $specFile $svcFolder
         } else {
-            updateSpecFileForContainer .\Package.xml $svcManifestFile $specFile $svcFolder
+            Update-SpecFileForContainer .\Package.xml $svcManifestFile $specFile $svcFolder
         }
     }
     $specXml = [xml](Get-Content $specFile)
     
-    appendFileElement $specXml (&{If($svcFolder) {"$svcFolder\Code\**\*.*"} Else {"Code\**\*.*"}}) ($name + "Pkg\Code")
-    appendFileElement $specXml (&{If($svcFolder) {"$svcFolder\Config\**\*.*"} Else {"Config\**\*.*"}}) ($name + "Pkg\Config")
-    appendFileElement $specXml (&{If($svcFolder) {"$svcFolder\ServiceManifest.xml"} Else {".\ServiceManifest.xml"}}) ($name + "Pkg\ServiceManifest.xml")    
+    Add-FileElement $specXml (&{If($svcFolder) {"$svcFolder\Code\**\*.*"} Else {"Code\**\*.*"}}) ($name + "Pkg\Code")
+    Add-FileElement $specXml (&{If($svcFolder) {"$svcFolder\Config\**\*.*"} Else {"Config\**\*.*"}}) ($name + "Pkg\Config")
+    Add-FileElement $specXml (&{If($svcFolder) {"$svcFolder\ServiceManifest.xml"} Else {".\ServiceManifest.xml"}}) ($name + "Pkg\ServiceManifest.xml")    
 
     $specXml.Save($specFile)
 }
@@ -152,11 +202,15 @@ function Publish-ServiceFabricNuGetPackage {
     param(
         [string] $OutPath
     )
-    publish $OutPath
+
+    Publish-ServicePackage $OutPath
 }
 
-function Create-Process() {
-	param([string] $fileName, [string] $arguments)
+function Start-Process {
+	param (
+        [string] $fileName, 
+        [string] $arguments
+    )
 
 	$pinfo = New-Object System.Diagnostics.ProcessStartInfo
 	$pinfo.RedirectStandardError = $true
@@ -167,13 +221,19 @@ function Create-Process() {
 
 	$p = New-Object System.Diagnostics.Process
 	$p.StartInfo = $pinfo
-
+    
 	return $p
 }
 
 
-function updateSpecFileForContainer([string]$specFile, [string]$srvManifest, [string] $targetSpecFile, [string]$svcFolder)
-{
+function Update-SpecFileForContainer {
+    param (
+        [string]$specFile, 
+        [string]$srvManifest, 
+        [string] $targetSpecFile, 
+        [string]$svcFolder
+    )
+
     $manifest = [xml](Get-Content $srvManifest)
     $name = $manifest.DocumentElement.Attributes["Name"].Value
 	if ($name.EndsWith("Pkg")) {$name = $name.Substring(0, $name.Length-3)}
@@ -182,33 +242,50 @@ function updateSpecFileForContainer([string]$specFile, [string]$srvManifest, [st
     $container = ($manifest.ServiceManifest.CodePackage.EntryPoint.ContainerHost)
     if ($container){
         $contentXml = [xml] (Get-Content $specFile)
-        replaceString $contentXml "`$serviceName" $name        
-        replaceString $contentXml "`$serviceNamePkg" $name + "Pkg"
-        replaceString $contentXml "`$serviceVersion" $version
-        replaceString $contentXml "`$assemblyTitle" (&{If($container.ImageName) {$container.ImageName} Else {"Container"}})
-        replaceString $contentXml "`$assemblyCompany" "Company"        
-        replaceString $contentXml "`$assemblyDescription" "Unknown"
-        replaceString $contentXml "`$copyRight" "Unknown"	
-        #$codeNode = $contentXml | Select-Xml -Xpath "//files/file[@src='Code\**\*.*']" | Select-Object -Exp Node
-        #$codeNode.ParentNode.RemoveChild($codeNode)
+        Update-String $contentXml "`$serviceName" $name        
+        Update-String $contentXml "`$serviceNamePkg" $name + "Pkg"
+        Update-String $contentXml "`$serviceVersion" $version
+        Update-String $contentXml "`$assemblyTitle" (&{If($container.ImageName) {$container.ImageName} Else {"Container"}})
+        Update-String $contentXml "`$assemblyCompany" "Company"        
+        Update-String $contentXml "`$assemblyDescription" "Unknown"
+        Update-String $contentXml "`$copyRight" "Unknown"	        
         $contentXml.Save($targetSpecFile)
     }    
 }
 
-function appendFileElement([xml]$xmlDoc,[string]$src,[string]$target) {
+function Add-FileElement {
+    param (
+        [xml]$xmlDoc,
+        [string]$src,
+        [string]$target
+    )
+
     $element = $xmlDoc.CreateElement("file")
-    appendAttribute $xmlDoc $element "src" $src
-    appendAttribute $xmlDoc $element "target" $target
+    Add-Attribute $xmlDoc $element "src" $src
+    Add-Attribute $xmlDoc $element "target" $target
     $xmlDoc.package.files.AppendChild($element)
 }
 
-function appendAttribute($xml, $element, [string]$name, [string]$value) {
+function Add-Attribute {
+    param (
+        $xml, 
+        $element, 
+        [string]$name, 
+        [string]$value
+    )
+
     $attribute = $xml.CreateAttribute($name)
     $attribute.Value = $value
     $element.Attributes.Append($attribute)
 }
 
-function replaceString([xml]$xmlDoc, [string]$searchPattern, [string]$newString) {
+function Update-String {
+    param (
+        [xml]$xmlDoc, 
+        [string]$searchPattern, 
+        [string]$newString
+    )
+    
     $nodes = $xmlDoc | Select-Xml -Xpath "//*/text()[contains(.,'$searchpattern')]" | Select-Object -Exp Node
     Foreach($node in $nodes) {     
         $node.ParentNode.'#text' = $node.ParentNode.'#text'.Replace($searchPattern, $newString)
@@ -218,8 +295,15 @@ function replaceString([xml]$xmlDoc, [string]$searchPattern, [string]$newString)
         $node.Value = $node.Value.Replace($searchPattern, $newString)
     }
 }
-function updateSpecFile([string]$specFile, [string]$srvManifest, $executable, [string] $targetSpecFile, [string]$svcFolder)
-{
+function Update-SpecFile{
+    param (
+        [string]$specFile, 
+        [string]$srvManifest, 
+        $executable, 
+        [string] $targetSpecFile, 
+        [string]$svcFolder
+    )
+
 	$manifest = [xml](Get-Content $srvManifest)
 	$name = $manifest.DocumentElement.Attributes["Name"].Value
 	if ($name.EndsWith("Pkg")){$name = $name.Substring(0, $name.Length-3)}
@@ -228,31 +312,41 @@ function updateSpecFile([string]$specFile, [string]$srvManifest, $executable, [s
 
     $contentXml = [xml] (Get-Content $specFile)
 	
-    replaceString $contentXml "`$serviceName" $name
-    replaceString $contentXml "`$serviceNamePkg" $name + "Pkg"
-	replaceString $contentXml "`$serviceVersion" $version
-    replaceString $contentXml "`$assemblyTitle" $assembly.GetCustomAttributes([System.Reflection.AssemblyTitleAttribute], $false).Title
+    Update-String $contentXml "`$serviceName" $name
+    Update-String $contentXml "`$serviceNamePkg" $name + "Pkg"
+	Update-String $contentXml "`$serviceVersion" $version
+    Update-String $contentXml "`$assemblyTitle" $assembly.GetCustomAttributes([System.Reflection.AssemblyTitleAttribute], $false).Title
     
     $company = $assembly.GetCustomAttributes([System.Reflection.AssemblyCompanyAttribute], $false).Company
-    replaceString $contentXml "`$assemblyCompany" (&{If($company) {$company} Else {"Company"}})
+    Update-String $contentXml "`$assemblyCompany" (&{If($company) {$company} Else {"Company"}})
     
     $description = $assembly.GetCustomAttributes([System.Reflection.AssemblyDescriptionAttribute], $false).Description    
-	replaceString $contentXml "`$assemblyDescription" (&{If($description) {$description} Else {"Description"}})
-    replaceString $contentXml "`$copyRight" $assembly.GetCustomAttributes([System.Reflection.AssemblyCopyrightAttribute], $false).Copyright	
+	Update-String $contentXml "`$assemblyDescription" (&{If($description) {$description} Else {"Description"}})
+    Update-String $contentXml "`$copyRight" $assembly.GetCustomAttributes([System.Reflection.AssemblyCopyrightAttribute], $false).Copyright	
 
 	$contentXml.Save($targetSpecFile)
 }
-function isServicePackagePath([string] $path)
-{    
+function Test-ServicePackagePath {
+    param (
+        [string] $path
+    )
+        
     return Test-Path (Join-Path $path "ServiceManifest.xml")   
 }
 
-function isAppPackagePath([string] $path)
-{
+function Test-AppPackagePath {
+    param (
+        [string] $path
+    )
+
     return Test-Path (Join-Path $path "ApplicationManifest.xml")
 }
-function packageService([string] $path)
-{    
+function New-ServicePackage {    
+    param (
+        [string] $workingPath,
+        [string] $outputPath
+    )
+
     #make nuget.exe writable
     Set-ItemProperty NuGet.exe -Name IsReadOnly -Value $false
 
@@ -271,26 +365,30 @@ function packageService([string] $path)
 
     Write-Log " "
     Write-Log "Updating NuGet..." -ForegroundColor Green
-    Write-Log (Invoke-Command {"$path\NuGet.exe update -Self"} -ErrorAction Stop)
+    Write-Log (Invoke-Command {"$workingPath\NuGet.exe update -Self"} -ErrorAction Stop) 
 
     Write-Log " "
     Write-Log "Creating package..." -ForegroundColor Green
     
     # Create symbols package if any .pdb files are located in the lib folder
     If ((Get-ChildItem *.pdb -Path .\lib -Recurse).Count -gt 0) {
-	    $packageTask = createProcess $path\NuGet.exe ("pack $path\Package.nuspec -Symbol -Verbosity Detailed -OutputDirectory $path")
-        runProcessWaitForMessage -process $packageTask -message "Successfully created package"
+	    $packageTask = New-ProcessStartInfo $workingPath\NuGet.exe ("pack $workingPath\Package.nuspec -Symbol -Verbosity Detailed -OutputDirectory $outputPath")
+        Start-ProcessWaitForMessage -process $packageTask -message "Successfully created package"
         $global:ExitCode = $packageTask.ExitCode
     }
     Else {
-	    $packageTask = createProcess $path\NuGet.exe ("pack $path\Package.nuspec -Verbosity Detailed -OutputDirectory $path")
-	    runProcessWaitForMessage -process $packageTask -message "Successfully created package"
+	    $packageTask = New-ProcessStartInfo $workingPath\NuGet.exe ("pack $workingPath\Package.nuspec -Verbosity Detailed -OutputDirectory $outputPath")
+	    Start-ProcessWaitForMessage -process $packageTask -message "Successfully created package"
         $global:ExitCode = $packageTask.ExitCode
     }    
 }
 
-function createProcess([string] $fileName, [string] $arguments)
-{
+function New-ProcessStartInfo {
+    param (
+        [string] $fileName, 
+        [string] $arguments
+    )
+
 	$pinfo = New-Object System.Diagnostics.ProcessStartInfo
 	$pinfo.RedirectStandardError = $true
 	$pinfo.RedirectStandardOutput = $true
@@ -304,8 +402,11 @@ function createProcess([string] $fileName, [string] $arguments)
 	return $p
 }
 
-function runProcessWaitForMessage{
-    param($process, [string] $message)
+function Start-ProcessWaitForMessage {
+    param (
+        $process, 
+        [string] $message
+    )
     
     $global:message = $message
     $global:process = $process
