@@ -79,7 +79,7 @@ function New-ServiceFabricNuGetPackage {
     }
     
     if ($Publish -and $global:ExitCode -eq 0) {
-        Publish-ServicePackage $WorkingFolder
+        Publish-ServicePackage (Join-Path $OutPath (Get-ChildItem $OutPath *.nupkg | Select-Object -First 1).Name) $WorkingFolder
     }
     
     Remove-TemporaryDirectory $WorkingFolder
@@ -100,13 +100,22 @@ function Remove-TemporaryDirectory{
 } 
 
 function Publish-ServicePackage {
-    param([string] $outputPath)
+    param(
+        [string] $NuGetPackage,
+        [string] $NuGetPath
+    )
 
 	Write-Log " "
 	Write-Log "Publishing package..." -ForegroundColor Green
 
-	# Get nuget config
-	[xml]$nugetConfig = Get-Content $outputPath\NuGet.Config
+    $currentPath = Get-ScriptDirectory
+
+    # Get nuget config
+    if ($NuGetPath) {
+        [xml]$nugetConfig = Get-Content $NuGetPath\NuGet.Config
+    } else {
+        [xml]$nugetConfig = Get-Content $currentPath\NuGet.Config
+    }
 	
 	$nugetConfig.configuration.packageSources.add | ForEach-Object {
 		$url = $_.value
@@ -114,26 +123,32 @@ function Publish-ServicePackage {
 		Write-Log "Repository Url: $url"
 		Write-Log " "
 
-		Get-ChildItem $outputPath *.nupkg | Where-Object { $_.Name.EndsWith(".symbols.nupkg") -eq $false } | ForEach-Object { 
-
-			# Try to push package
-			$task = New-ProcessStartInfo $outputPath\NuGet.exe ("push " + $outputPath + "\" + $_.Name + " -Source " + $url)
-			$task.Start() | Out-Null
-			$task.WaitForExit()
+        # Try to push package
+        if ($NuGetPath) {
+            $task = New-ProcessStartInfo $NuGetPath\NuGet.exe ("push " + $NuGetPackage + " -Source " + $url)
+        } else {
+            $task = New-ProcessStartInfo $currentPath\NuGet.exe ("push " + $NuGetPackage + " -Source " + $url)
+        }
+		$task.Start() | Out-Null
+		$task.WaitForExit()
 			
-			$output = ($task.StandardOutput.ReadToEnd() -Split '[\r\n]') |? { $_ }
-			$error = ($task.StandardError.ReadToEnd() -Split '[\r\n]') |? { $_ }
-			Write-Log $output
-			Write-Log $error Error
+		$output = ($task.StandardOutput.ReadToEnd() -Split '[\r\n]') |? { $_ }
+		$error = ($task.StandardError.ReadToEnd() -Split '[\r\n]') |? { $_ }
+		Write-Log $output
+		Write-Log $error Error
 		   
-			if ($task.ExitCode -gt 0) {
-				Resolve-PublishError -ErrorMessage $error
-			}
-			else {
-				$global:ExitCode = 0
-			}                
+		if ($task.ExitCode -gt 0) {
+			Resolve-PublishError -ErrorMessage $error
 		}
+		else {
+			$global:ExitCode = 0
+		}                
 	}
+}
+
+function Get-ScriptDirectory
+{
+    Split-Path $script:MyInvocation.MyCommand.Path
 }
 
 function Resolve-PublishError {
@@ -199,11 +214,32 @@ function Update-ServicePackageFiles{
 }
 
 function Publish-ServiceFabricNuGetPackage {
+    <#
+        .SYNOPSIS
+            Public Service Fabric NuGet package to a NuGet source.
+    
+        .DESCRIPTION
+            This function publishes you Servcie Fabric NuGet package to a NuGet source, using configurations specified in the config file.
+    
+        .PARAMETER NuGetPackage
+            The path to your NuGet package.
+    
+        .PARAMETER NuGetConfig
+            The path to NuGet path that contains NuGet.exe and NuGet.config.
+    
+        .EXAMPLE
+            Publish-ServiceFabricNuGetPackage /path/to/service/package /path/to/NuGet
+    
+        .NOTES
+            Revision History:
+                10/09/2017 : Haishi Bai - Created.
+    #>
     param(
-        [string] $OutPath
+        [string] $NuGetPackage,
+        [string] $NuGetConfig
     )
 
-    Publish-ServicePackage $OutPath
+    Publish-ServicePackage $NuGetPackage $NuGetConfig
 }
 
 function Start-Process {
