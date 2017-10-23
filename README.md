@@ -26,8 +26,8 @@ New-ServiceFabricNuGetPackage -InputPath <path to your Service Fabric package fo
 
 ## Tutorials
 
-* [Create and reuse a Service Fabric NuGet package](docs\Tutorial-AuthorService.md)
-* [Publish a Service Fabric NuGet package](docs\Tutorial-PublishService.md)
+* [Create and reuse a Service Fabric NuGet package](docs/Tutorial-AuthorService.md)
+* [Publish a Service Fabric NuGet package](docs/Tutorial-PublishService.md)
 
 
 # Updates

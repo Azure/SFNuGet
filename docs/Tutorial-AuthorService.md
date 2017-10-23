@@ -30,9 +30,9 @@ To simulate the experience of your service users, you’ll create a new Service 
 
 2. In **Solution Explorer**, right-click on the solution node and select the **Manage Nuget Packages for Solution** menu.
 3. Browse to the **MyCoolService** package. Check the *application* project, and then click on the **Install** button, as shown in the following figure:
-![Manage NuGet packages](imgs\use-nuget.png)
+![Manage NuGet packages](imgs/use-nuget.png)
 
 4. Now your application is configured with the **MyCoolService** service! Simply publish your application.
 
 Once the application is deployed, you can observe how **MyCoolService** has been deployed along your own services:
-![SF Explorer](imgs\sf-explorer.png)
+![SF Explorer](imgs/sf-explorer.png)
