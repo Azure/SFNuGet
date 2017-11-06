@@ -29,6 +29,8 @@ New-ServiceFabricNuGetPackage -InputPath <path to your Service Fabric package fo
 * [Create and reuse a Service Fabric NuGet package](docs/Tutorial-AuthorService.md)
 * [Publish a Service Fabric NuGet package](docs/Tutorial-PublishService.md)
 
+## Customize you NuGet packages
+The PowerShell module uses a **Package.xml** file as the template to generate NuGet package specification. When it builds your NuGet packages, it automatically reads service metadata and assembly metadata to replace placeholders (marked with '$' sign) in this file, such as $serviceName and $assemblyCompany. If you prefer, you can update this file to use customized information instead of auto-detected information. Especially, you probably want to update the **licenseUrl** to match with your licensing model.
 
 # Updates
 
