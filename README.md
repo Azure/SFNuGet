@@ -44,7 +44,7 @@ The PowerShell module uses a **Package.xml** file as the template to generate Nu
 
 # Known Issues/Limitations
 
-1 Your service won't appear under the **Services** folder of the Service Fabric application project in Solution Explorer. This is because SF Visual Studio tooling populates this folder based on service projects in the same solution, not services defined in the application manifest. This doesn't affect your service being deployed and used, though.
+1. Your service won't appear under the **Services** folder of the Service Fabric application project in Solution Explorer. This is because SF Visual Studio tooling populates this folder based on service projects in the same solution, not services defined in the application manifest. This doesn't affect your service being deployed and used, though.
 
 # Contributing
 

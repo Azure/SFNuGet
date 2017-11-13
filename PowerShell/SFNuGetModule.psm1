@@ -50,12 +50,13 @@ function New-ServiceFabricNuGetPackage {
 
     #create a temp folder and load files to it
     $WorkingFolder = New-TemporaryDirectory
+
     #copy files
     Robocopy $InputPath $WorkingFolder /S /NS /NC /NFL /NDL /NP /NJH /NJS    
     Robocopy .\tools $WorkingFolder\tools /S /NS /NC /NFL /NDL /NP /NJH /NJS
     Copy-Item .\NuGet.exe $WorkingFolder
     Copy-Item .\NuGet.config $WorkingFolder
-
+    
     if (Test-AppPackagePath $InputPath) {
         #This is an application package folder, package all services under the folder
         $folders = Get-ChildItem $WorkingFolder | ?{$_.PSIsContainer}
@@ -195,11 +196,12 @@ function Update-ServicePackageFiles{
     $manifest = [xml](Get-Content $svcManifestFile)
     $name = $manifest.DocumentElement.Attributes["Name"].Value
     if ($name.EndsWith("Pkg")) {$name = $name.Substring(0, $name.Length-3)}
-    
     if ($first) {
-        if (Test-Path $path\Code) {
-            $execFile = Get-ChildItem $path\Code *.exe | Select-Object -First 1
-            Update-SpecFile .\Package.xml $svcManifestFile $path\Code\$execFile $specFile $svcFolder
+        $executable = ($manifest.ServiceManifest.CodePackage.EntryPoint.ExeHost)
+        if ($executable) {            
+            $execFile = Get-ChildItem ([IO.Path]::Combine($path,$manifest.ServiceManifest.CodePackage.Name,$executable.Program))
+            Write-Host $execFile
+            Update-SpecFile .\Package.xml $svcManifestFile $execFile $specFile $svcFolder
         } else {
             Update-SpecFileForContainer .\Package.xml $svcManifestFile $specFile $svcFolder
         }
@@ -276,7 +278,7 @@ function Update-SpecFileForContainer {
     $version = $manifest.DocumentElement.Attributes["Version"].Value
 
     $container = ($manifest.ServiceManifest.CodePackage.EntryPoint.ContainerHost)
-    if ($container){
+    if ($container) {
         $contentXml = [xml] (Get-Content $specFile)
         Update-String $contentXml "`$serviceName" $name        
         Update-String $contentXml "`$serviceNamePkg" $name + "Pkg"
@@ -360,7 +362,7 @@ function Update-SpecFile{
 	Update-String $contentXml "`$assemblyDescription" (&{If($description) {$description} Else {"Description"}})
     Update-String $contentXml "`$copyRight" $assembly.GetCustomAttributes([System.Reflection.AssemblyCopyrightAttribute], $false).Copyright	
 
-	$contentXml.Save($targetSpecFile)
+    $contentXml.Save($targetSpecFile)
 }
 function Test-ServicePackagePath {
     param (
