@@ -25,22 +25,18 @@ function New-ServiceFabricNuGetPackage {
             Revision History:
                 10/09/2017 : Haishi Bai - Created.
     #>
+    [cmdletbinding()]
     param(
-        [string] $InputPath,
-        [string] $OutPath,
-        [switch] $Publish=$false
+        [parameter(mandatory=$true)][string] $InputPath,
+        [parameter(mandatory=$true)][string] $OutPath,
+        [parameter(mandatory=$false)][switch] $Publish=$false
     )
+
+    $ErrorActionPreference = "stop"
     
     #chek if InputPath exists
-    if (!$InputPath -Or !(Test-Path $InputPath)) {
-        Write-Host "Input path is null or not found."
-        Exit 1
-    }
-    
-    #check if OutPath parameter is null
-    if (!$OutPath) {
-        Write-Host "Output path is null."
-        Exit 1
+    if (!(Test-Path $InputPath)) {
+        Write-error "Input path is not found."
     }
 
     #create output folder if doesn't exists
