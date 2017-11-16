@@ -66,50 +66,57 @@ function updateAppManifest($appXml, $srvXml, $appOverridesXml, $isWeb) {
             appendAttribute $appXml $srvElement "ServicePackageActivationMode" "ExclusiveProcess"
         }
     }
-	#$elm = ($srvType.Extensions.Extension | Where-Object {$_.Name -eq '__GeneratedServiceType__'})
-	#if ($elm.Name) {
-	#	appendAttribute $appXml $srvElement "GeneratedIdRef" $elm.GeneratedId
-	#}
-    #$srvXml.ServiceManifest.CodePackage.EntryPoint.ContainerHost) {Write-Host "OK"}
-
-    Foreach($srvType in $srvXml.ServiceManifest.ServiceTypes.ChildNodes) {
-        if ($srvType.Name -eq "StatelessServiceType") {
-            $stElement = $appXml.CreateElement("StatelessService", $nsm.DefaultNamespace)
-            appendAttribute $appXml $stElement "ServiceTypeName" $srvType.ServiceTypeName
-            appendAttribute $appXml $stElement "InstanceCount" ("["+$srvName+"_InstanceCount]")            
-            $partElement = $appXml.CreateElement("SingletonPartition", $nsm.DefaultNamespace)
-			addParameter $appXml $parmElement ($srvName+"_InstanceCount") "-1"
-            $stElement.AppendChild($partElement)
-            $srvElement.AppendChild($stElement)
-            if ($srvType.UseImplicitHost) {
-                appendAttribute $appXml $srvElement "ServicePackageActivationMode" "ExclusiveProcess"
+    
+    $overrideNode = $null
+    if ($appOverridesXml) {
+        $overrideNode = $appOverridesXml.ApplicationManifest.DefaultServices.Service | Where-Object {$_.Name -eq $srvName}
+    }
+    if ($overrideNode) {
+        $srvElement = $appXml.ImportNode($overrideNode, $true)
+    } else {
+        Foreach($srvType in $srvXml.ServiceManifest.ServiceTypes.ChildNodes) {
+            if ($srvType.Name -eq "StatelessServiceType") {
+                $stElement = $appXml.CreateElement("StatelessService", $nsm.DefaultNamespace)
+                appendAttribute $appXml $stElement "ServiceTypeName" $srvType.ServiceTypeName
+                appendAttribute $appXml $stElement "InstanceCount" ("["+$srvName+"_InstanceCount]")            
+                $partElement = $appXml.CreateElement("SingletonPartition", $nsm.DefaultNamespace)
+                addParameter $appXml $parmElement ($srvName+"_InstanceCount") "-1"
+                $stElement.AppendChild($partElement)
+                $srvElement.AppendChild($stElement)
+                if ($srvType.UseImplicitHost) {
+                    appendAttribute $appXml $srvElement "ServicePackageActivationMode" "ExclusiveProcess"
+                }
+            }
+	        elseif ($srvType.Name -eq "StatefulServiceType") {
+		        $stElement = $appXml.CreateElement("StatefulService", $nsm.DefaultNamespace)
+		        appendAttribute $appXml $stElement "ServiceTypeName" $srvType.ServiceTypeName
+		        appendAttribute $appXml $stElement "TargetReplicaSetSize" ("["+$srvName+"_TargetReplicaSetSize]")
+		        addParameter $appXml $parmElement ($srvName+"_TargetReplicaSetSize") "3"
+		        appendAttribute $appXml $stElement "MinReplicaSetSize" ("["+$srvName+"_MinReplicaSetSize]")
+		        addParameter $appXml $parmElement ($srvName+"_MinReplicaSetSize") "3"
+		        $partElement = $appXml.CreateElement("UniformInt64Partition", $nsm.DefaultNamespace)
+		        appendAttribute $appXml $partElement "PartitionCount" ("["+$srvName+"_PartitionCount]")
+		        addParameter $appXml $parmElement ($srvName+"_PartitionCount") "1"
+		        appendAttribute $appXml $partElement "LowKey" "-9223372036854775808"
+		        appendAttribute $appXml $partElement "HighKey" "9223372036854775807"
+		        $stElement.AppendChild($partElement)
+		        $srvElement.AppendChild($stElement)
             }
         }
-		elseif ($srvType.Name -eq "StatefulServiceType") {
-			$stElement = $appXml.CreateElement("StatefulService", $nsm.DefaultNamespace)
-			appendAttribute $appXml $stElement "ServiceTypeName" $srvType.ServiceTypeName
-			appendAttribute $appXml $stElement "TargetReplicaSetSize" ("["+$srvName+"_TargetReplicaSetSize]")
-			addParameter $appXml $parmElement ($srvName+"_TargetReplicaSetSize") "3"
-			appendAttribute $appXml $stElement "MinReplicaSetSize" ("["+$srvName+"_MinReplicaSetSize]")
-			addParameter $appXml $parmElement ($srvName+"_MinReplicaSetSize") "3"
-			$partElement = $appXml.CreateElement("UniformInt64Partition", $nsm.DefaultNamespace)
-			appendAttribute $appXml $partElement "PartitionCount" ("["+$srvName+"_PartitionCount]")
-			addParameter $appXml $parmElement ($srvName+"_PartitionCount") "1"
-			appendAttribute $appXml $partElement "LowKey" "-9223372036854775808"
-			appendAttribute $appXml $partElement "HighKey" "9223372036854775807"
-			$stElement.AppendChild($partElement)
-			$srvElement.AppendChild($stElement)
-		}
     }
-
 	if ($appOverridesXml) {
         $overrideElm = ($appOverridesXml.ApplicationManifest.ServiceManifestImport | Where-Object {$_.ServiceManifestRef.ServiceManifestName -eq $srvXml.ServiceManifest.Name})
-        if ($overrideElm.Policies){
-                    $importElement.AppendChild($appXml.ImportNode($overrideElm.Policies, $true))
+        if ($overrideElm.Policies) {
+            $importElement.AppendChild($appXml.ImportNode($overrideElm.Policies, $true))
         }
         $principleElm = $appOverridesXml.ApplicationManifest.Principals
         if ($principleElm){
             $appXml.ApplicationManifest.AppendChild($appXml.ImportNode($principleElm, $true))
+        }
+        if ($appOverridesXml.ApplicationManifest.Parameters) {
+                Foreach($parameter in $appOverridesXml.ApplicationManifest.Parameters.ChildNodes) {
+                    $appXml.ApplicationManifest.Parameters.AppendChild($appXml.ImportNode($parameter, $true))
+                }
         }
     }
 

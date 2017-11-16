@@ -30,9 +30,23 @@ New-ServiceFabricNuGetPackage -InputPath <path to your Service Fabric package fo
 * [Publish a Service Fabric NuGet package](docs/Tutorial-PublishService.md)
 
 # Customize you NuGet packages
+
+## Use a custom Package.xml file
 The PowerShell module uses a **Package.xml** file as the template to generate NuGet package specification. When it builds your NuGet packages, it automatically reads service metadata and assembly metadata to replace placeholders (marked with '$' sign) in this file, such as $serviceName and $assemblyCompany. If you prefer, you can update this file to use customized information instead of auto-detected information. Especially, you probably want to update the **licenseUrl** to match with your licensing model.
 
+## Use application manifest overrides
+If you want your services to be configured in specific ways in the target application manifest, you can add an **ApplicationManifest.overrides.xml** file to the root folder of your service package. The following elements from the override file will be carried over to the target application manifest:
+
+* DefaultServices\Service
+* Parameters 
+* Policies
+* Principals
+
 # Updates
+
+## November 11, 2017
+
+* Application manifest overrides are extended to support services and parameters in addition to policies and principals.
 
 ## September 29, 2017
 

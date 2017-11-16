@@ -180,7 +180,7 @@ function Resolve-PublishError {
 	}
 }
 
-function Update-ServicePackageFiles{
+function Update-ServicePackageFiles {
     param (
         [string]$path, 
         [string]$svcManifestFile, 
@@ -207,6 +207,11 @@ function Update-ServicePackageFiles{
     Add-FileElement $specXml (&{If($svcFolder) {"$svcFolder\Code\**\*.*"} Else {"Code\**\*.*"}}) ($name + "Pkg\Code")
     Add-FileElement $specXml (&{If($svcFolder) {"$svcFolder\Config\**\*.*"} Else {"Config\**\*.*"}}) ($name + "Pkg\Config")
     Add-FileElement $specXml (&{If($svcFolder) {"$svcFolder\ServiceManifest.xml"} Else {".\ServiceManifest.xml"}}) ($name + "Pkg\ServiceManifest.xml")    
+    
+    $overridePath = [IO.Path]::Combine($path, $svcFolder, "ApplicationManifest.overrides.xml")
+    if ([IO.File]::Exists($overridePath)) {
+        Add-FileElement $specXml (&{If($svcFolder) {"$svcFolder\ApplicationManifest.overrides.xml"} Else {".\ApplicationManifest.overrides.xml"}}) ($name + "Pkg\ApplicationManifest.overrides.xml")        
+    }
 
     $specXml.Save($specFile)
 }
