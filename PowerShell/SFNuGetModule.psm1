@@ -49,9 +49,9 @@ function New-ServiceFabricNuGetPackage {
 
     #copy files
     Robocopy $InputPath $WorkingFolder /S /NS /NC /NFL /NDL /NP /NJH /NJS    
-    Robocopy .\tools $WorkingFolder\tools /S /NS /NC /NFL /NDL /NP /NJH /NJS
-    Copy-Item .\NuGet.exe $WorkingFolder
-    Copy-Item .\NuGet.config $WorkingFolder
+    Robocopy "$(Get-ScriptDirectory)\tools" $WorkingFolder\tools /S /NS /NC /NFL /NDL /NP /NJH /NJS
+    Copy-Item "$(Get-ScriptDirectory)\NuGet.exe" $WorkingFolder
+    Copy-Item "$(Get-ScriptDirectory)\NuGet.config" $WorkingFolder
     
     if (Test-AppPackagePath $InputPath) {
         #This is an application package folder, package all services under the folder
@@ -387,7 +387,7 @@ function New-ServicePackage {
     )
 
     #make nuget.exe writable
-    Set-ItemProperty NuGet.exe -Name IsReadOnly -Value $false
+    Set-ItemProperty "$workingPath\NuGet.exe" -Name IsReadOnly -Value $false
 
     #create nupkg file backup
     if (Test-Path *.nupkg) {
