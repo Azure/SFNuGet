@@ -347,21 +347,39 @@ function Update-SpecFile{
 	$name = $manifest.DocumentElement.Attributes["Name"].Value
 	if ($name.EndsWith("Pkg")){$name = $name.Substring(0, $name.Length-3)}
     $version = $manifest.DocumentElement.Attributes["Version"].Value
-    $assembly = [System.Reflection.Assembly]::LoadFrom($executable)
-
+    
     $contentXml = [xml] (Get-Content $specFile)
-	
+    
+    $isValidAssembly = $TRUE
+
+    Try {
+        $assembly = [System.Reflection.Assembly]::LoadFrom($executable)
+    }
+    Catch {
+        Write-Log ("Failed to load service code as a assembly.")
+        $isValidAssembly = $FALSE
+    }
+
     Update-String $contentXml "`$serviceName" $name
     Update-String $contentXml "`$serviceNamePkg" $name + "Pkg"
-	Update-String $contentXml "`$serviceVersion" $version
-    Update-String $contentXml "`$assemblyTitle" $assembly.GetCustomAttributes([System.Reflection.AssemblyTitleAttribute], $false).Title
+    Update-String $contentXml "`$serviceVersion" $version
+
+    $company = "Company"
+
+    if ($isValidAssembly) {
+        Update-String $contentXml "`$assemblyTitle" $assembly.GetCustomAttributes([System.Reflection.AssemblyTitleAttribute], $false).Title
+        $company = $assembly.GetCustomAttributes([System.Reflection.AssemblyCompanyAttribute], $false).Company
+    }
     
-    $company = $assembly.GetCustomAttributes([System.Reflection.AssemblyCompanyAttribute], $false).Company
     Update-String $contentXml "`$assemblyCompany" (&{If($company) {$company} Else {"Company"}})
     
-    $description = $assembly.GetCustomAttributes([System.Reflection.AssemblyDescriptionAttribute], $false).Description    
-	Update-String $contentXml "`$assemblyDescription" (&{If($description) {$description} Else {"Description"}})
-    Update-String $contentXml "`$copyRight" $assembly.GetCustomAttributes([System.Reflection.AssemblyCopyrightAttribute], $false).Copyright	
+    $description = "Description"
+
+    if ($isValidAssembly) {
+        Update-String $contentXml "`$copyRight" $assembly.GetCustomAttributes([System.Reflection.AssemblyCopyrightAttribute], $false).Copyright	
+        $description = $assembly.GetCustomAttributes([System.Reflection.AssemblyDescriptionAttribute], $false).Description    
+    }
+	Update-String $contentXml "`$assemblyDescription" (&{If($description) {$description} Else {"Description"}})    
 
     $contentXml.Save($targetSpecFile)
 }
