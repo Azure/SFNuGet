@@ -47,6 +47,9 @@ function New-ServiceFabricNuGetPackage {
     #create a temp folder and load files to it
     $WorkingFolder = New-TemporaryDirectory
 
+    #remove the trailing "\" to avoid Robocopy error
+    if ($InputPath.EndsWith("\")) { $InputPath = $InputPath.SubString(0, $InputPath.Length-1)}    
+
     #copy files
     Robocopy $InputPath $WorkingFolder /S /NS /NC /NFL /NDL /NP /NJH /NJS    
     Robocopy "$(Get-ScriptDirectory)\tools" $WorkingFolder\tools /S /NS /NC /NFL /NDL /NP /NJH /NJS
@@ -197,9 +200,9 @@ function Update-ServicePackageFiles {
         if ($executable) {            
             $execFile = Get-ChildItem ([IO.Path]::Combine($path,$manifest.ServiceManifest.CodePackage.Name,$executable.Program))
             Write-Host $execFile
-            Update-SpecFile .\Package.xml $svcManifestFile $execFile $specFile $svcFolder
+            Update-SpecFile "$(Get-ScriptDirectory)\Package.xml" $svcManifestFile $execFile $specFile $svcFolder
         } else {
-            Update-SpecFileForContainer .\Package.xml $svcManifestFile $specFile $svcFolder
+            Update-SpecFileForContainer "$(Get-ScriptDirectory)\Package.xml" $svcManifestFile $specFile $svcFolder
         }
     }
     $specXml = [xml](Get-Content $specFile)
